@@ -20,14 +20,16 @@ initGL win = do
   glHint GL_PERSPECTIVE_CORRECTION_HINT GL_NICEST
   (w,h) <- GLFW.getFramebufferSize win
   resizeScene win w h
-
+  
 resizeScene :: GLFW.FramebufferSizeCallback
 resizeScene win w     0      = resizeScene win w 1 -- prevent divide by zero
-resizeScene _   width height = do
-  glViewport 0 0 (fromIntegral width) (fromIntegral height)
+resizeScene _   width' height' = do
+  let width''  = if width' < 600 then 600 else width'
+      height'' = if height' < 200 then 200 else height'
+  glViewport 0 0 (fromIntegral width'') (fromIntegral height'')
   glMatrixMode GL_PROJECTION
   glLoadIdentity
-  glOrtho 0 (fromIntegral width) 0 (fromIntegral height) 0 1
+  glOrtho 0 (fromIntegral width'') 0 (fromIntegral height'') 0 1
   -- gluPerspective 45 (fromIntegral width/fromIntegral height) 0.1 100
   glMatrixMode GL_MODELVIEW
   glLoadIdentity
@@ -35,8 +37,8 @@ resizeScene _   width height = do
 
 
 
-drawScene :: IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> GLFW.Window -> IO ()
-drawScene racketLeftYRef racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef _ = do
+drawScene :: IORef GLfloat -> GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> Int -> Int -> GLFW.Window ->  IO ()
+drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef width height _ = do
   -- clear the screen and the depth bufer
   glClear $ fromIntegral  $  GL_COLOR_BUFFER_BIT
                          .|. GL_DEPTH_BUFFER_BIT
@@ -127,17 +129,16 @@ vec2Norm xRef yRef = do
   case len /= 0 of
     True -> do 
       let nLen = 1 / len
-      print nLen
       modifyIORef xRef (* nLen)
       modifyIORef yRef (* nLen)
     _    -> return ()
 
 
-width :: Int
-width = 500
+-- width :: Int
+-- width = 1200
 
-height :: Int
-height = 200
+-- height :: Int
+-- height = 500
 
 racketWidth :: GLfloat
 racketWidth = 10
@@ -151,8 +152,6 @@ racketSpeed = 3
 racketLeftX :: GLfloat
 racketLeftX = 10.0
 
-racketRightX :: GLfloat
-racketRightX = (fromIntegral width) - racketWidth - 10
 
 -- ball
 
@@ -160,7 +159,7 @@ ballSize :: GLfloat
 ballSize = 8
 
 ballSpeed :: GLfloat
-ballSpeed = 2
+ballSpeed = 8
 
 drawRect :: GLfloat -> GLfloat -> GLfloat -> GLfloat -> IO ()
 drawRect x y width height = do 
@@ -180,51 +179,89 @@ shutdown win = do
   return ()
 
 
-keyPressed :: IORef GLfloat -> IORef GLfloat -> GLFW.KeyCallback
-keyPressed _              _               win GLFW.Key'Escape _ GLFW.KeyState'Pressed   _ = shutdown win
-keyPressed racketLeftYRef _               _   GLFW.Key'W      _ GLFW.KeyState'Pressed   _ = modifyIORef racketLeftYRef (+15)
-keyPressed racketLeftYRef _               _   GLFW.Key'W      _ GLFW.KeyState'Repeating _ = modifyIORef racketLeftYRef (+15)
-keyPressed racketLeftYRef _               _   GLFW.Key'S      _ GLFW.KeyState'Pressed   _ = modifyIORef racketLeftYRef (subtract 15)
-keyPressed racketLeftYRef _               _   GLFW.Key'S      _ GLFW.KeyState'Repeating _ = modifyIORef racketLeftYRef (subtract 15)
-keyPressed _              racketRightYRef _   GLFW.Key'I      _ GLFW.KeyState'Pressed   _ = modifyIORef racketRightYRef (+15)
-keyPressed _              racketRightYRef _   GLFW.Key'I      _ GLFW.KeyState'Repeating _ = modifyIORef racketRightYRef (+15)
-keyPressed _              racketRightYRef _   GLFW.Key'K      _ GLFW.KeyState'Pressed   _ = modifyIORef racketRightYRef (subtract 15)
-keyPressed _              racketRightYRef _   GLFW.Key'K      _ GLFW.KeyState'Repeating _ = modifyIORef racketRightYRef (subtract 15)
-keyPressed _    _    _   _               _ _                     _ = return ()
+keyPressed :: GLFW.KeyCallback
+keyPressed win GLFW.Key'Escape _ GLFW.KeyState'Pressed   _ = shutdown win
+keyPressed _   _               _ _                       _ = return ()
+
+isPressed :: GLFW.KeyState -> Bool
+isPressed GLFW.KeyState'Pressed   = True
+isPressed GLFW.KeyState'Repeating = True
+isPressed _ = False
+
+readMultipleKeys :: GLfloat -> IORef GLfloat -> IORef GLfloat -> GLFW.Window -> IO ()
+readMultipleKeys height racketLeftYRef racketRightYRef win = do
+  -- left
+  w <- GLFW.getKey win GLFW.Key'W
+  if isPressed w then moveRacketUp height racketLeftYRef else return ()
+  
+  s <- GLFW.getKey win GLFW.Key'S
+  if isPressed s then moveRacketDown racketLeftYRef else return ()
+    
+  -- right
+  i <- GLFW.getKey win GLFW.Key'I
+  if isPressed i then moveRacketUp height racketRightYRef else return ()
+  
+  k <- GLFW.getKey win GLFW.Key'K
+  if isPressed k then moveRacketDown racketRightYRef else return ()
+
+moveRacketUp :: GLfloat -> IORef GLfloat -> IO ()
+moveRacketUp height racketYRef = do
+  racketY <- readIORef racketYRef
+  let newRacketY = racketY + 10
+      newRacketY' = 
+        if newRacketY < (height - racketHeight)
+          then newRacketY
+          else height - racketHeight
+  writeIORef racketYRef newRacketY'
+
+moveRacketDown :: IORef GLfloat -> IO ()
+moveRacketDown racketYRef = do
+  racketY <- readIORef racketYRef
+  let newRacketY = racketY - 10
+      newRacketY' = 
+        if newRacketY > 0
+          then newRacketY
+          else 0
+  writeIORef racketYRef newRacketY'  
 
 main :: IO ()
 main = do
      True <- GLFW.init
-     
-     racketLeftYRef  <- newIORef 50
-     racketRightYRef <- newIORef 50
-     ballPosXRef     <- newIORef ((fromIntegral width) / 2)
-     ballPosYRef     <- newIORef ((fromIntegral width) / 2)
-     ballDirXRef     <- newIORef (-1)
-     ballDirYRef     <- newIORef (0)
-     
+          
      -- select type of display mode:
      -- Double buffer
      -- RGBA color
      -- Alpha components supported
      -- Depth buffer
-     GLFW.defaultWindowHints
+     -- GLFW.defaultWindowHints
      -- open a window
-     Just win <- GLFW.createWindow width height "phong" Nothing Nothing
+     Just win <- GLFW.createWindow 500 200 "phong" Nothing Nothing
+     (width,height) <- GLFW.getFramebufferSize win
+     
+     let racketRightX = (fromIntegral width) - racketWidth - 10
+
+     
+     racketLeftYRef  <- newIORef 50
+     racketRightYRef <- newIORef 50
+     ballPosXRef     <- newIORef ((fromIntegral width) / 2)
+     ballPosYRef     <- newIORef ((fromIntegral height) / 2)
+     ballDirXRef     <- newIORef (-1)
+     ballDirYRef     <- newIORef (0)
+     
      GLFW.makeContextCurrent (Just win)
      -- register the function to do all our OpenGL drawing
-     GLFW.setWindowRefreshCallback win (Just (drawScene racketLeftYRef racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef) )
+     GLFW.setWindowRefreshCallback win (Just (drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef width height) )
      -- register the funciton called when our window is resized
      GLFW.setFramebufferSizeCallback win (Just resizeScene)
      -- register the function called when the keyboard is pressed.
-     GLFW.setKeyCallback win (Just (keyPressed racketLeftYRef racketRightYRef))
+     GLFW.setKeyCallback win (Just keyPressed)
      GLFW.setWindowCloseCallback win (Just shutdown)
-     GLFW.setStickyKeysInputMode win GLFW.StickyKeysInputMode'Enabled
      -- initialize our window.
      initGL win
      
      -- start event processing engine
      forever $ do
        GLFW.pollEvents
-       drawScene racketLeftYRef racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef win
+       readMultipleKeys (fromIntegral height) racketLeftYRef racketRightYRef win
+       drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef width height win
        GLFW.swapBuffers win
