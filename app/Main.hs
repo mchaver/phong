@@ -1,6 +1,10 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 
 import qualified Graphics.UI.GLFW as GLFW
+import qualified Graphics.Rendering.FTGL as FTGL
+-- import qualified Graphics.UI.GLUT.Fonts as GLUT
 -- everything from here starts with gl or GL
 import Graphics.GL
 import Graphics.GLU ( gluPerspective )
@@ -9,6 +13,8 @@ import System.Exit ( exitWith, ExitCode(..) )
 import Control.Monad ( forever )
 
 import Data.IORef
+
+import qualified Data.Text.Encoding as T
 
 initGL :: GLFW.Window -> IO ()
 initGL win = do
@@ -37,8 +43,8 @@ resizeScene _   width' height' = do
 
 
 
-drawScene :: IORef GLfloat -> GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> Int -> Int -> GLFW.Window ->  IO ()
-drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef width height _ = do
+drawScene :: IORef GLfloat -> GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef Int -> IORef Int -> Int -> Int -> GLFW.Window ->  IO ()
+drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef leftScoreRef rightScoreRef width height _ = do
   -- clear the screen and the depth bufer
   glClear $ fromIntegral  $  GL_COLOR_BUFFER_BIT
                          .|. GL_DEPTH_BUFFER_BIT
@@ -87,6 +93,7 @@ drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ba
   if ballPosX < 0 
     then do
       -- add score_right
+      modifyIORef rightScoreRef (+ 1)
       writeIORef ballPosXRef ((fromIntegral width) / 2)
       writeIORef ballPosYRef ((fromIntegral height) / 2)
       writeIORef ballDirXRef (abs ballDirX)
@@ -97,6 +104,7 @@ drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ba
   if ballPosX > (fromIntegral width)
     then do 
       -- add score_left
+      modifyIORef leftScoreRef (+ 1)
       writeIORef ballPosXRef ((fromIntegral width) / 2)
       writeIORef ballPosYRef ((fromIntegral height) / 2)
       writeIORef ballDirXRef (negate . abs $ ballDirX)
@@ -116,8 +124,8 @@ drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ba
   -- vec2Norm ballPosXRef ballPosYRef
   
   drawRect ballPosX ballPosY ballSize ballSize
-    
   glFlush
+
 
 
 -- set a vector's lenght to 1 (x + y == 1)
@@ -247,10 +255,12 @@ main = do
      ballPosYRef     <- newIORef ((fromIntegral height) / 2)
      ballDirXRef     <- newIORef (-1)
      ballDirYRef     <- newIORef (0)
+     leftScoreRef    <- newIORef (0) :: IO (IORef Int)
+     rightScoreRef   <- newIORef (0) :: IO (IORef Int)
      
      GLFW.makeContextCurrent (Just win)
      -- register the function to do all our OpenGL drawing
-     GLFW.setWindowRefreshCallback win (Just (drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef width height) )
+     GLFW.setWindowRefreshCallback win (Just (drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef leftScoreRef rightScoreRef width height) )
      -- register the funciton called when our window is resized
      GLFW.setFramebufferSizeCallback win (Just resizeScene)
      -- register the function called when the keyboard is pressed.
@@ -259,9 +269,27 @@ main = do
      -- initialize our window.
      initGL win
      
+     font <- FTGL.createExtrudeFont "FreeSans.ttf"
+     FTGL.fsetFontCharMap font (FTGL.marshalCharMap FTGL.EncodingUnicode)
+     _ <- FTGL.setFontFaceSize font 50 50
+
      -- start event processing engine
      forever $ do
        GLFW.pollEvents
        readMultipleKeys (fromIntegral height) racketLeftYRef racketRightYRef win
-       drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef width height win
+       drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef leftScoreRef rightScoreRef width height win
+       
+       leftScore  <- readIORef leftScoreRef
+       rightScore <- readIORef rightScoreRef
+       drawText font ((show leftScore) ++ ":" ++ (show rightScore)) ((((fromIntegral width) / 2) - 20), ((fromIntegral height) - 50)) (1,1,1)
+       glColor4f 1 1 1 1
+       
        GLFW.swapBuffers win
+
+
+drawText :: FTGL.Font -> String -> (GLfloat, GLfloat) -> (GLfloat, GLfloat, GLfloat) -> IO()
+drawText fnt s (x, y) (r, g, b) = do
+  glColor3f r g b
+  glTranslatef x y 0
+  glRasterPos2f 0 0
+  FTGL.renderFont fnt s FTGL.All
