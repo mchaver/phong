@@ -2,6 +2,8 @@
 {-# LANGUAGE RecordWildCards   #-}
 module Main where
 
+import Control.Concurrent (threadDelay)
+
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Graphics.Rendering.FTGL as FTGL
 -- import qualified Graphics.UI.GLUT.Fonts as GLUT
@@ -43,8 +45,11 @@ resizeScene _   width' height' = do
 
 -- drawScene :: Scene -> GameState -> IO ()
 
-drawMainMenu :: IO ()
-drawMainMenu = return ()
+drawMainMenu :: FTGL.Font -> Int -> Int -> GLFW.Window ->  IO ()
+drawMainMenu font width height _ = 
+  drawText font "Hpong" ((((fromIntegral width) / 2) - 20), ((fromIntegral height) - 50)) (1,1,1)
+
+  
 
 -- drawGameScene :: IORef GLfloat -> GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef Int -> IORef Int -> Int -> Int -> GLFW.Window ->  IO ()
 -- drawGameScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef leftScoreRef rightScoreRef width height _ = do
@@ -201,6 +206,13 @@ isPressed GLFW.KeyState'Pressed   = True
 isPressed GLFW.KeyState'Repeating = True
 isPressed _ = False
 
+mainMenuReadKeys :: IORef Scene -> GLFW.Window -> IO ()
+mainMenuReadKeys sceneRef win = do
+  enter <- GLFW.getKey win GLFW.Key'Enter
+  if isPressed enter then writeIORef sceneRef Game else return ()
+  return ()
+  
+
 readMultipleKeys :: GLfloat -> IORef GLfloat -> IORef GLfloat -> GLFW.Window -> IO ()
 readMultipleKeys height racketLeftYRef racketRightYRef win = do
   -- left
@@ -270,6 +282,8 @@ main = do
      Just win <- GLFW.createWindow 500 200 "phong" Nothing Nothing
      (width,height) <- GLFW.getFramebufferSize win
      
+     currentSceneRef <- newIORef MainMenu
+     
      racketLeftYRef  <- newIORef 50
      racketRightYRef <- newIORef 50
      ballPosXRef     <- newIORef ((fromIntegral width) / 2)
@@ -292,10 +306,14 @@ main = do
              racketRightX
              width
              height
+
+     font <- FTGL.createExtrudeFont "FreeSans.ttf"
+     FTGL.fsetFontCharMap font (FTGL.marshalCharMap FTGL.EncodingUnicode)
+     _ <- FTGL.setFontFaceSize font 50 50
      
      GLFW.makeContextCurrent (Just win)
      -- register the function to do all our OpenGL drawing
-     GLFW.setWindowRefreshCallback win (Just (drawGameScene gameState) )
+     GLFW.setWindowRefreshCallback win (Just (drawMainMenu font width height) )
      -- register the funciton called when our window is resized
      GLFW.setFramebufferSizeCallback win (Just resizeScene)
      -- register the function called when the keyboard is pressed.
@@ -304,21 +322,26 @@ main = do
      -- initialize our window.
      initGL win
      
-     font <- FTGL.createExtrudeFont "FreeSans.ttf"
-     FTGL.fsetFontCharMap font (FTGL.marshalCharMap FTGL.EncodingUnicode)
-     _ <- FTGL.setFontFaceSize font 50 50
 
      -- start event processing engine
      forever $ do
        GLFW.pollEvents
-       readMultipleKeys (fromIntegral height) racketLeftYRef racketRightYRef win
-       drawGameScene gameState win
        
-       leftScore  <- readIORef $ leftScoreRef
-       rightScore <- readIORef $ rightScoreRef
-       drawText font ((show leftScore) ++ ":" ++ (show rightScore)) ((((fromIntegral width) / 2) - 20), ((fromIntegral height) - 50)) (1,1,1)
-       glColor4f 1 1 1 1
-       
+       scene <- readIORef currentSceneRef
+       case scene of
+         MainMenu -> do
+           mainMenuReadKeys currentSceneRef win
+           drawMainMenu font width height win           
+         Game -> do
+           readMultipleKeys (fromIntegral height) racketLeftYRef racketRightYRef win           
+           drawGameScene gameState win
+           leftScore  <- readIORef $ leftScoreRef
+           rightScore <- readIORef $ rightScoreRef
+           drawText font ((show leftScore) ++ ":" ++ (show rightScore)) ((((fromIntegral width) / 2) - 20), ((fromIntegral height) - 50)) (1,1,1)
+           glColor4f 1 1 1 1
+           
+
+       -- threadDelay 100000
        GLFW.swapBuffers win
 
 
