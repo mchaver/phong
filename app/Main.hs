@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-
+{-# LANGUAGE RecordWildCards   #-}
 module Main where
 
 import qualified Graphics.UI.GLFW as GLFW
@@ -41,10 +41,15 @@ resizeScene _   width' height' = do
   glLoadIdentity
   glFlush
 
+-- drawScene :: Scene -> GameState -> IO ()
 
+drawMainMenu :: IO ()
+drawMainMenu = return ()
 
-drawScene :: IORef GLfloat -> GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef Int -> IORef Int -> Int -> Int -> GLFW.Window ->  IO ()
-drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef leftScoreRef rightScoreRef width height _ = do
+-- drawGameScene :: IORef GLfloat -> GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef GLfloat -> IORef Int -> IORef Int -> Int -> Int -> GLFW.Window ->  IO ()
+-- drawGameScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef leftScoreRef rightScoreRef width height _ = do
+drawGameScene :: GameState -> GLFW.Window -> IO ()
+drawGameScene GameState{..} _ = do
   -- clear the screen and the depth bufer
   glClear $ fromIntegral  $  GL_COLOR_BUFFER_BIT
                          .|. GL_DEPTH_BUFFER_BIT
@@ -232,6 +237,25 @@ moveRacketDown racketYRef = do
           else 0
   writeIORef racketYRef newRacketY'  
 
+
+data GameState = GameState
+  { racketLeftYRef  :: IORef GLfloat
+  , racketRightYRef :: IORef GLfloat
+  , ballPosXRef     :: IORef GLfloat
+  , ballPosYRef     :: IORef GLfloat
+  , ballDirXRef     :: IORef GLfloat
+  , ballDirYRef     :: IORef GLfloat
+  , leftScoreRef    :: IORef Int
+  , rightScoreRef   :: IORef Int
+  , racketRightX    :: GLfloat
+  , width           :: Int
+  , height          :: Int
+  }
+
+data Scene = 
+  MainMenu |
+  Game
+
 main :: IO ()
 main = do
      True <- GLFW.init
@@ -246,9 +270,6 @@ main = do
      Just win <- GLFW.createWindow 500 200 "phong" Nothing Nothing
      (width,height) <- GLFW.getFramebufferSize win
      
-     let racketRightX = (fromIntegral width) - racketWidth - 10
-
-     
      racketLeftYRef  <- newIORef 50
      racketRightYRef <- newIORef 50
      ballPosXRef     <- newIORef ((fromIntegral width) / 2)
@@ -257,10 +278,24 @@ main = do
      ballDirYRef     <- newIORef (0)
      leftScoreRef    <- newIORef (0) :: IO (IORef Int)
      rightScoreRef   <- newIORef (0) :: IO (IORef Int)
+     let racketRightX = (fromIntegral width) - racketWidth - 10
+     let gameState = 
+           GameState
+             racketLeftYRef
+             racketRightYRef
+             ballPosXRef
+             ballPosYRef
+             ballDirXRef
+             ballDirYRef
+             leftScoreRef
+             rightScoreRef
+             racketRightX
+             width
+             height
      
      GLFW.makeContextCurrent (Just win)
      -- register the function to do all our OpenGL drawing
-     GLFW.setWindowRefreshCallback win (Just (drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef leftScoreRef rightScoreRef width height) )
+     GLFW.setWindowRefreshCallback win (Just (drawGameScene gameState) )
      -- register the funciton called when our window is resized
      GLFW.setFramebufferSizeCallback win (Just resizeScene)
      -- register the function called when the keyboard is pressed.
@@ -277,10 +312,10 @@ main = do
      forever $ do
        GLFW.pollEvents
        readMultipleKeys (fromIntegral height) racketLeftYRef racketRightYRef win
-       drawScene racketLeftYRef racketRightX racketRightYRef ballPosXRef ballPosYRef ballDirXRef ballDirYRef leftScoreRef rightScoreRef width height win
+       drawGameScene gameState win
        
-       leftScore  <- readIORef leftScoreRef
-       rightScore <- readIORef rightScoreRef
+       leftScore  <- readIORef $ leftScoreRef
+       rightScore <- readIORef $ rightScoreRef
        drawText font ((show leftScore) ++ ":" ++ (show rightScore)) ((((fromIntegral width) / 2) - 20), ((fromIntegral height) - 50)) (1,1,1)
        glColor4f 1 1 1 1
        
